@@ -11,12 +11,14 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
       - name: Build APK
         run: |
+          cd SpeedometerApp
           echo "sdk.dir=$ANDROID_HOME" > local.properties
-          chmod +x gradlew
-          ./gradlew assembleDebug
+          gradle assembleDebug
       - uses: actions/upload-artifact@v4
         with:
           name: GPS-Speedometer
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: SpeedometerApp/app/build/outputs/apk/debug/app-debug.apk
