@@ -22,16 +22,23 @@ jobs:
       - name: Accept Android SDK licenses
         run: yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses || true
 
-      - name: Make gradlew executable
-        run: chmod +x SpeedometerApp/gradlew
+      - name: Find and make gradlew executable
+        run: |
+          echo "=== Searching for gradlew ==="
+          find . -name "gradlew" -type f
+          find . -name "gradlew" -type f -exec chmod +x {} \;
 
       - name: Build Debug APK
-        working-directory: SpeedometerApp
-        run: ./gradlew assembleDebug --stacktrace
+        run: |
+          GRADLEW_PATH=$(find . -name "gradlew" -type f | head -1)
+          GRADLEW_DIR=$(dirname $GRADLEW_PATH)
+          echo "Building from directory: $GRADLEW_DIR"
+          cd $GRADLEW_DIR
+          ./gradlew assembleDebug --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: GPS-Speedometer-APK
-          path: SpeedometerApp/app/build/outputs/apk/debug/*.apk
+          path: "**/build/outputs/apk/debug/*.apk"
           retention-days: 7
