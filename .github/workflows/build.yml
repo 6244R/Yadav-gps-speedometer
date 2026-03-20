@@ -1,5 +1,4 @@
 name: Build APK
-
 on:
   push:
     branches: [ main ]
@@ -7,6 +6,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
     steps:
       - uses: actions/checkout@v4
 
@@ -16,30 +17,46 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Create Android Project
+      - name: Create full Android project
         run: |
-          mkdir -p SpeedometerApp/app/src/main/java/com/speedometer
-          mkdir -p SpeedometerApp/app/src/main/res/layout
-          mkdir -p SpeedometerApp/app/src/main/res/values
-          mkdir -p SpeedometerApp/app/src/main/assets
+          mkdir -p app/src/main/java/com/speedometer
+          mkdir -p app/src/main/res/layout
+          mkdir -p app/src/main/res/values
+          mkdir -p app/src/main/res/xml
+          mkdir -p app/src/main/assets
 
-      - name: Create settings.gradle
-        run: |
-          cat > SpeedometerApp/settings.gradle << 'EOF'
+          cat > settings.gradle << 'SETTEOF'
           pluginManagement {
-            repositories { google(); mavenCentral(); gradlePluginPortal() }
+            repositories {
+              google()
+              mavenCentral()
+              gradlePluginPortal()
+            }
           }
           dependencyResolutionManagement {
-            repositories { google(); mavenCentral() }
+            repositories {
+              google()
+              mavenCentral()
+            }
           }
           rootProject.name = "SpeedometerApp"
           include ':app'
-          EOF
+          SETTEOF
 
-      - name: Create build.gradle
-        run: |
-          cat > SpeedometerApp/app/build.gradle << 'EOF'
-          plugins { id 'com.android.application' }
+          cat > build.gradle << 'BEOF'
+          plugins {
+            id 'com.android.application' version '8.2.0' apply false
+          }
+          BEOF
+
+          cat > gradle.properties << 'GEOF'
+          android.useAndroidX=true
+          GEOF
+
+          cat > app/build.gradle << 'ABEOF'
+          plugins {
+            id 'com.android.application'
+          }
           android {
             compileSdk 34
             namespace 'com.speedometer'
@@ -50,20 +67,225 @@ jobs:
               versionCode 1
               versionName "1.0"
             }
+            buildTypes {
+              debug { minifyEnabled false }
+            }
+            compileOptions {
+              sourceCompatibility JavaVersion.VERSION_1_8
+              targetCompatibility JavaVersion.VERSION_1_8
+            }
           }
           dependencies {
             implementation 'androidx.appcompat:appcompat:1.6.1'
+            implementation 'androidx.localbroadcastmanager:localbroadcastmanager:1.1.0'
           }
-          EOF
+          ABEOF
+
+          cat > app/src/main/AndroidManifest.xml << 'MEOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+            <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+            <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+            <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+            <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION"/>
+            <uses-permission android:name="android.permission.WAKE_LOCK"/>
+            <uses-permission android:name="android.permission.VIBRATE"/>
+            <uses-permission android:name="android.permission.INTERNET"/>
+            <application
+              android:allowBackup="true"
+              android:label="GPS Speedometer"
+              android:theme="@style/AppTheme"
+              android:hardwareAccelerated="true">
+              <activity
+                android:name=".MainActivity"
+                android:exported="true"
+                android:screenOrientation="portrait">
+                <intent-filter>
+                  <action android:name="android.intent.action.MAIN"/>
+                  <category android:name="android.intent.category.LAUNCHER"/>
+                </intent-filter>
+              </activity>
+              <service
+                android:name=".GpsService"
+                android:foregroundServiceType="location"
+                android:exported="false"/>
+            </application>
+          </manifest>
+          MEOF
+
+          cat > app/src/main/res/values/styles.xml << 'SEOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+            <style name="AppTheme" parent="Theme.AppCompat.NoActionBar">
+              <item name="android:windowBackground">#0a0a0f</item>
+            </style>
+          </resources>
+          SEOF
+
+          cat > app/src/main/res/layout/activity_main.xml << 'LEOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="#0a0a0f">
+            <WebView android:id="@+id/webView"
+              android:layout_width="match_parent"
+              android:layout_height="match_parent"/>
+          </RelativeLayout>
+          LEOF
+
+          cat > app/src/main/java/com/speedometer/MainActivity.java << 'JEOF'
+          package com.speedometer;
+          import android.Manifest;
+          import android.content.BroadcastReceiver;
+          import android.content.Context;
+          import android.content.Intent;
+          import android.content.IntentFilter;
+          import android.content.pm.PackageManager;
+          import android.os.Build;
+          import android.os.Bundle;
+          import android.webkit.JavascriptInterface;
+          import android.webkit.WebSettings;
+          import android.webkit.WebView;
+          import android.webkit.WebViewClient;
+          import android.webkit.WebChromeClient;
+          import android.webkit.GeolocationPermissions;
+          import androidx.appcompat.app.AppCompatActivity;
+          import androidx.core.app.ActivityCompat;
+          import androidx.core.content.ContextCompat;
+          import androidx.localbroadcastmanager.content.LocalBroadcastManager;
+          public class MainActivity extends AppCompatActivity {
+            private WebView webView;
+            private BroadcastReceiver gpsReceiver = new BroadcastReceiver() {
+              public void onReceive(Context context, Intent intent) {
+                double speed = intent.getDoubleExtra("speed", 0);
+                double lat = intent.getDoubleExtra("lat", 0);
+                double lon = intent.getDoubleExtra("lon", 0);
+                double accuracy = intent.getDoubleExtra("accuracy", 0);
+                String js = String.format("javascript:onNativeGPS(%f,%f,%f,%f);", speed, lat, lon, accuracy);
+                runOnUiThread(() -> webView.evaluateJavascript(js, null));
+              }
+            };
+            protected void onCreate(Bundle savedInstanceState) {
+              super.onCreate(savedInstanceState);
+              setContentView(R.layout.activity_main);
+              webView = findViewById(R.id.webView);
+              WebSettings s = webView.getSettings();
+              s.setJavaScriptEnabled(true);
+              s.setDomStorageEnabled(true);
+              s.setGeolocationEnabled(true);
+              s.setAllowFileAccessFromFileURLs(true);
+              s.setAllowUniversalAccessFromFileURLs(true);
+              webView.addJavascriptInterface(new Bridge(), "AndroidBridge");
+              webView.setWebViewClient(new WebViewClient());
+              webView.setWebChromeClient(new WebChromeClient() {
+                public void onGeolocationPermissionsShowPrompt(String origin, GeolocationPermissions.Callback cb) {
+                  cb.invoke(origin, true, false);
+                }
+              });
+              webView.loadUrl("file:///android_asset/speedometer.html");
+              if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION}, 100);
+              }
+            }
+            public class Bridge {
+              @JavascriptInterface
+              public void startGpsService() {
+                Intent i = new Intent(MainActivity.this, GpsService.class);
+                i.setAction("START");
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(i);
+                else startService(i);
+              }
+              @JavascriptInterface
+              public void stopGpsService() {
+                Intent i = new Intent(MainActivity.this, GpsService.class);
+                i.setAction("STOP");
+                startService(i);
+              }
+              @JavascriptInterface
+              public void vibrate() {
+                android.os.Vibrator v = (android.os.Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
+                if (v != null) v.vibrate(new long[]{0,500,200,500,200,1000}, -1);
+              }
+            }
+            protected void onResume() {
+              super.onResume();
+              LocalBroadcastManager.getInstance(this).registerReceiver(gpsReceiver, new IntentFilter("GPS_UPDATE"));
+            }
+            protected void onPause() {
+              super.onPause();
+              LocalBroadcastManager.getInstance(this).unregisterReceiver(gpsReceiver);
+            }
+          }
+          JEOF
+
+          cat > app/src/main/java/com/speedometer/GpsService.java << 'GSEOF'
+          package com.speedometer;
+          import android.app.*;
+          import android.content.Intent;
+          import android.location.*;
+          import android.os.*;
+          import androidx.core.app.NotificationCompat;
+          import androidx.localbroadcastmanager.content.LocalBroadcastManager;
+          public class GpsService extends Service implements LocationListener {
+            private LocationManager lm;
+            private boolean running = false;
+            public int onStartCommand(Intent intent, int flags, int startId) {
+              if (intent != null && "STOP".equals(intent.getAction())) { stopSelf(); return START_NOT_STICKY; }
+              if (!running) {
+                running = true;
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                  NotificationChannel ch = new NotificationChannel("gps", "GPS", NotificationManager.IMPORTANCE_LOW);
+                  ((NotificationManager)getSystemService(NOTIFICATION_SERVICE)).createNotificationChannel(ch);
+                }
+                Notification n = new NotificationCompat.Builder(this, "gps")
+                  .setContentTitle("GPS Speedometer").setContentText("Tracking...").setSmallIcon(android.R.drawable.ic_menu_mylocation).setOngoing(true).setSilent(true).build();
+                startForeground(1, n);
+                lm = (LocationManager) getSystemService(LOCATION_SERVICE);
+                try {
+                  lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000, 2, this);
+                  lm.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 2000, 5, this);
+                } catch (SecurityException e) {}
+              }
+              return START_STICKY;
+            }
+            public void onLocationChanged(Location loc) {
+              double spd = loc.hasSpeed() ? loc.getSpeed() * 3.6 : 0;
+              Intent b = new Intent("GPS_UPDATE");
+              b.putExtra("speed", spd); b.putExtra("lat", loc.getLatitude());
+              b.putExtra("lon", loc.getLongitude()); b.putExtra("accuracy", (double)loc.getAccuracy());
+              LocalBroadcastManager.getInstance(this).sendBroadcast(b);
+              ((NotificationManager)getSystemService(NOTIFICATION_SERVICE))
+                .notify(1, new NotificationCompat.Builder(this,"gps").setContentTitle("GPS Speedometer")
+                .setContentText(String.format("Speed: %.0f km/h", spd)).setSmallIcon(android.R.drawable.ic_menu_mylocation).setOngoing(true).setSilent(true).build());
+            }
+            public void onDestroy() { running=false; if(lm!=null) lm.removeUpdates(this); super.onDestroy(); }
+            public IBinder onBind(Intent i) { return null; }
+            public void onStatusChanged(String p,int s,Bundle e){}
+            public void onProviderEnabled(String p){}
+            public void onProviderDisabled(String p){}
+          }
+          GSEOF
+
+          wget -q "https://services.gradle.org/distributions/gradle-8.2-bin.zip" -O gradle.zip
+          unzip -q gradle.zip
+          mkdir -p gradle/wrapper
+          cat > gradle/wrapper/gradle-wrapper.properties << 'GWEOF'
+          distributionUrl=https\://services.gradle.org/distributions/gradle-8.2-bin.zip
+          GWEOF
+
+          cp -r . /tmp/SpeedometerApp
+          cd /tmp/SpeedometerApp
 
       - name: Build APK
         run: |
-          cd SpeedometerApp
+          cd /tmp/SpeedometerApp
           chmod +x gradlew
-          ./gradlew assembleDebug
+          ./gradlew assembleDebug --no-daemon
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: GPS-Speedometer-APK
-          path: SpeedometerApp/app/build/outputs/apk/debug/app-debug.apk
+          path: /tmp/SpeedometerApp/app/build/outputs/apk/debug/app-debug.apk
+```
