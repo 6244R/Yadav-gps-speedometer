@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>GPS Speedometer Pro</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Rajdhani:wght@500;700&display=swap');
+
+:root {
+  --bg: #080810;
+  --card: #0f0f1a;
+  --border: #1a1a2e;
+  --cyan: #00f5ff;
+  --orange: #ff6b00;
+  --green: #00ff88;
+  --red: #ff1744;
+  --yellow: #ffd600;
+  --dim: #44446a;
+  --white: #e8e8ff;
+}
+
+* { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; user-select:none; }
+
+body {
+  background: var(--bg);
+  font-family: 'Rajdhani', sans-serif;
+  color: var(--white);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* ── SPLASH SCREEN ── */
+#splash {
+  position: fixed; inset: 0; z-index: 9999;
+  background: var(--bg);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 20px;
+  transition: opacity 0.5s;
+}
+#splash h1 {
+  font-family: 'Orbitron', monospace;
+  font-size: 1.8rem; font-weight: 900;
+  color: var(--cyan);
+  text-shadow: 0 0 30px var(--cyan);
+  letter-spacing: 4px;
+}
+#splash p { color: var(--dim); font-size: 0.85rem; letter-spacing: 2px; }
+.splash-ring {
+  width: 80px; height: 80px;
+  border: 3px solid var(--border);
+  border-top-color: var(--cyan);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── GPS POPUP ── */
+#gpsPopup {
+  position: fixed; inset: 0; z-index: 8888;
+  background: rgba(0,0,0,0.9);
+  display: none; align-items: center; justify-content: center;
+  backdrop-filter: blur(8px);
+}
+#gpsPopup.show { display: flex; }
+.gps-popup-box {
+  background: var(--card);
+  border: 2px solid var(--cyan);
+  border-radius: 24px;
+  padding: 32px 24px;
+  max-width: 320px; width: 90%;
+  text-align: center;
+  box-shadow: 0 0 60px rgba(0,245,255,0.2);
+  animation: popIn 0.4s cubic-bezier(0.34,1.56,0.64,1);
+}
+@keyframes popIn { from{transform:scale(0.5);opacity:0} to{transform:scale(1);opacity:1} }
+.gps-icon { font-size: 4rem; margin-bottom: 16px; animation: bounce 1s ease infinite alternate; }
+@keyframes bounce { from{transform:translateY(0)} to{transform:translateY(-10px)} }
+.gps-popup-title {
+  font-family: 'Orbitron', monospace;
+  font-size: 1.2rem; color: var(--cyan);
+  margin-bottom: 12px; letter-spacing: 2px;
+}
+.gps-popup-msg { font-size: 0.9rem; color: var(--dim); line-height: 1.6; margin-bottom: 24px; }
+.gps-allow-btn {
+  background: linear-gradient(135deg, var(--cyan), #0088ff);
+  color: #000; border: none; border-radius: 14px;
+  font-family: 'Orbitron', monospace;
+  font-size: 0.9rem; font-weight: 700;
+  padding: 14px 32px; cursor: pointer;
+  letter-spacing: 2px; width: 100%;
+  box-shadow: 0 0 20px rgba(0,245,255,0.4);
+  transition: transform 0.1s;
+}
+.gps-allow-btn:active { transform: scale(0.96); }
+
+/* ── SERVICE WARNING POPUP ── */
+#servicePopup {
+  position: fixed; inset: 0; z-index: 7777;
+  background: rgba(0,0,0,0.9);
+  display: none; align-items: center; justify-content: center;
+  backdrop-filter: blur(8px);
+}
+#servicePopup.show { display: flex; }
+.service-box {
+  background: var(--card);
+  border: 2px solid var(--red);
+  border-radius: 24px;
+  padding: 32px 24px; max-width: 300px; width: 90%;
+  text-align: center;
+  box-shadow: 0 0 60px rgba(255,23,68,0.3);
+  animation: popIn 0.4s cubic-bezier(0.34,1.56,0.64,1);
+}
+.service-icon { font-size: 3.5rem; margin-bottom: 12px; animation: wiggle 0.4s ease infinite alternate; }
+@keyframes wiggle { from{transform:rotate(-15deg)} to{transform:rotate(15deg)} }
+.service-title { font-family:'Orbitron',monospace; font-size:1rem; color:var(--red); letter-spacing:2px; margin-bottom:8px; }
+.service-km-big { font-family:'Orbitron',monospace; font-size:2.2rem; color:var(--yellow); font-weight:900; margin:12px 0; }
+.service-msg { font-size:0.85rem; color:var(--dim); line-height:1.6; margin-bottom:20px; }
+.service-close {
+  background: var(--red); color:#fff; border:none; border-radius:12px;
+  font-family:'Orbitron',monospace; font-size:0.8rem; font-weight:700;
+  padding:12px 28px; cursor:pointer; letter-spacing:2px;
+  transition: transform 0.1s;
+}
+.service-close:active { transform: scale(0.96); }
+
+/* ── MAIN APP ── */
+#app { display: none; flex-direction: column; align-items: center; padding: 12px 12px 24px; min-height: 100vh; }
+#app.show { display: flex; }
+
+/* Header */
+.hdr { text-align:center; margin-bottom:12px; }
+.hdr h1 { font-family:'Orbitron',monospace; font-size:1rem; color:var(--cyan); letter-spacing:4px; text-shadow:0 0 15px var(--cyan); }
+.hdr p { font-size:0.65rem; color:var(--dim); letter-spacing:2px; margin-top:2px; }
+
+/* Dial */
+.dial-wrap { position:relative; width:260px; height:260px; margin:0 auto 12px; }
+#dialCanvas { display:block; }
+.speed-center {
+  position:absolute; top:50%; left:50%;
+  transform:translate(-50%,-44%);
+  text-align:center; pointer-events:none;
+}
+.spd-num {
+  font-family:'Orbitron',monospace; font-size:3.8rem; font-weight:900;
+  color:var(--cyan); line-height:1;
+  text-shadow:0 0 20px var(--cyan);
+  transition: color 0.3s, text-shadow 0.3s;
+}
+.spd-unit { font-size:0.8rem; color:var(--dim); letter-spacing:3px; margin-top:2px; }
+
+/* Stats */
+.stats { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; width:100%; max-width:360px; margin-bottom:10px; }
+.sc {
+  background:var(--card); border:1px solid var(--border);
+  border-radius:12px; padding:10px 6px; text-align:center;
+  position:relative; overflow:hidden;
+}
+.sc::after { content:''; position:absolute; top:0; left:0; right:0; height:2px; }
+.sc.c1::after{background:var(--cyan);} .sc.c2::after{background:var(--orange);} .sc.c3::after{background:var(--green);}
+.sv { font-family:'Orbitron',monospace; font-size:1.1rem; font-weight:700; line-height:1; }
+.sc.c1 .sv{color:var(--cyan);} .sc.c2 .sv{color:var(--orange);} .sc.c3 .sv{color:var(--green);}
+.sl { font-size:0.58rem; color:var(--dim); letter-spacing:1px; text-transform:uppercase; margin-top:4px; }
+
+/* Service bar */
+.svc-card {
+  background:var(--card); border:1px solid var(--border);
+  border-radius:14px; padding:12px 14px;
+  width:100%; max-width:360px; margin-bottom:10px;
+}
+.svc-row { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+.svc-lbl { font-size:0.7rem; color:var(--orange); letter-spacing:2px; font-weight:700; }
+.svc-left { font-family:'Orbitron',monospace; font-size:0.75rem; color:var(--white); }
+.prog-bg { width:100%; height:8px; background:var(--border); border-radius:99px; overflow:hidden; margin-bottom:8px; }
+.prog-fill { height:100%; background:linear-gradient(90deg,var(--green),var(--yellow),var(--red)); border-radius:99px; width:0%; transition:width 0.5s; }
+.svc-inp-row { display:flex; gap:6px; align-items:center; }
+.svc-inp-row label { font-size:0.65rem; color:var(--dim); white-space:nowrap; }
+.svc-inp-row input {
+  flex:1; background:var(--bg); border:1px solid var(--border);
+  border-radius:8px; color:var(--white);
+  font-family:'Orbitron',monospace; font-size:0.8rem;
+  padding:6px 8px; text-align:center; outline:none;
+}
+.svc-inp-row input:focus { border-color:var(--orange); }
+.rst-btn {
+  background:var(--orange); color:#000; border:none;
+  border-radius:8px; font-weight:700; font-size:0.7rem;
+  padding:7px 10px; cursor:pointer; letter-spacing:1px;
+  font-family:'Rajdhani',sans-serif;
+}
+
+/* Buttons */
+.btns { display:flex; gap:10px; width:100%; max-width:360px; margin-bottom:10px; }
+.btn {
+  flex:1; padding:14px; border:none; border-radius:12px;
+  font-family:'Orbitron',monospace; font-size:0.7rem; font-weight:700;
+  letter-spacing:2px; cursor:pointer; transition:all 0.15s;
+}
+.btn:active { transform:scale(0.95); }
+.btn:disabled { opacity:0.35; cursor:not-allowed; transform:none; }
+.btn-s { background:linear-gradient(135deg,#00c853,#69f0ae); color:#000; box-shadow:0 0 20px rgba(0,200,83,0.3); }
+.btn-x { background:linear-gradient(135deg,#d50000,#ff1744); color:#fff; box-shadow:0 0 20px rgba(213,0,0,0.3); }
+
+/* Status */
+.status {
+  display:flex; align-items:center; gap:8px;
+  background:var(--card); border:1px solid var(--border);
+  border-radius:10px; padding:9px 12px;
+  width:100%; max-width:360px; margin-bottom:10px;
+  font-size:0.72rem; color:var(--dim);
+}
+.dot { width:7px; height:7px; border-radius:50%; background:var(--dim); flex-shrink:0; transition:background 0.3s; }
+.dot.on { background:var(--green); box-shadow:0 0 8px var(--green); animation:blink 1.5s infinite; }
+.dot.err { background:var(--red); }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+/* Tabs */
+.tabs { display:flex; gap:0; width:100%; max-width:360px; margin-bottom:10px; border-radius:12px; overflow:hidden; border:1px solid var(--border); }
+.tab { flex:1; padding:10px; background:var(--card); color:var(--dim); border:none; cursor:pointer; font-family:'Rajdhani',sans-serif; font-weight:700; font-size:0.75rem; letter-spacing:1px; transition:all 0.2s; }
+.tab.active { background:var(--cyan); color:#000; }
+
+/* History */
+#historyPanel { width:100%; max-width:360px; display:none; }
+#historyPanel.show { display:block; }
+.hist-title { font-size:0.7rem; color:var(--dim); letter-spacing:2px; margin-bottom:8px; text-align:center; }
+.hist-list { display:flex; flex-direction:column; gap:6px; max-height:300px; overflow-y:auto; }
+.hist-item {
+  background:var(--card); border:1px solid var(--border);
+  border-radius:10px; padding:10px 12px;
+  display:flex; justify-content:space-between; align-items:center;
+}
+.hist-date { font-size:0.72rem; color:var(--dim); }
+.hist-data { font-family:'Orbitron',monospace; font-size:0.75rem; color:var(--cyan); }
+.hist-km { font-size:0.7rem; color:var(--orange); }
+.no-hist { text-align:center; color:var(--dim); font-size:0.8rem; padding:20px; }
+
+/* Yearly summary */
+.year-summary {
+  background:var(--card); border:1px solid var(--border);
+  border-radius:12px; padding:14px; margin-bottom:8px;
+}
+.year-title { font-family:'Orbitron',monospace; font-size:0.75rem; color:var(--yellow); letter-spacing:2px; margin-bottom:10px; }
+.year-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.year-stat { text-align:center; }
+.year-val { font-family:'Orbitron',monospace; font-size:1rem; color:var(--white); }
+.year-lbl { font-size:0.6rem; color:var(--dim); letter-spacing:1px; margin-top:2px; }
+
+.acc-note { font-size:0.6rem; color:var(--dim); text-align:center; margin-top:4px; }
+</style>
+</head>
+<body>
+
+<!-- SPLASH -->
+<div id="splash">
+  <div class="splash-ring"></div>
+  <h1>⚡ SPEEDOMETER</h1>
+  <p>LOADING...</p>
+</div>
+
+<!-- GPS PERMISSION POPUP -->
+<div id="gpsPopup">
+  <div class="gps-popup-box">
+    <div class="gps-icon">📡</div>
+    <div class="gps-popup-title">GPS PERMISSION</div>
+    <div class="gps-popup-msg">
+      Accurate speed aur distance ke liye<br>
+      <strong style="color:var(--cyan)">GPS permission allow karna zaroori hai</strong><br><br>
+      Agle screen mein <strong>"Allow"</strong> dabayein
+    </div>
+    <button class="gps-allow-btn" onclick="requestGPS()">📍 GPS ALLOW KARO</button>
+  </div>
+</div>
+
+<!-- SERVICE WARNING POPUP -->
+<div id="servicePopup">
+  <div class="service-box">
+    <div class="service-icon">🔧</div>
+    <div class="service-title">SERVICE DUE!</div>
+    <div class="service-km-big" id="svcKmBig">1000 KM</div>
+    <div class="service-msg">
+      Aapki bike ka service limit poora ho gaya!<br>
+      Kripya jaldi service karwayein. 🏍️
+    </div>
+    <button class="service-close" onclick="closeSvcPopup()">✅ THEEK HAI</button>
+  </div>
+</div>
+
+<!-- MAIN APP -->
+<div id="app">
+  <div class="hdr">
+    <h1>⚡ GPS SPEEDOMETER PRO</h1>
+    <p id="dateLabel">--</p>
+  </div>
+
+  <div class="dial-wrap">
+    <canvas id="dialCanvas" width="260" height="260"></canvas>
+    <div class="speed-center">
+      <div class="spd-num" id="spdNum">0</div>
+      <div class="spd-unit">KM/H</div>
+    </div>
+  </div>
+
+  <div class="stats">
+    <div class="sc c1"><div class="sv" id="maxSpd">0</div><div class="sl">Max km/h</div></div>
+    <div class="sc c2"><div class="sv" id="totKm">0.00</div><div class="sl">Total KM</div></div>
+    <div class="sc c3"><div class="sv" id="tripT">00:00</div><div class="sl">Time</div></div>
+  </div>
+
+  <div class="svc-card">
+    <div class="svc-row">
+      <span class="svc-lbl">🔧 SERVICE</span>
+      <span class="svc-left"><span id="svcLeft">0</span> km baki</span>
+    </div>
+    <div class="prog-bg"><div class="prog-fill" id="svcProg"></div></div>
+    <div class="svc-inp-row">
+      <label>Limit:</label>
+      <input type="number" id="svcLimit" value="1000" min="1" max="99999" onchange="updateSvcUI()"/>
+      <span style="font-size:0.65rem;color:var(--dim)">KM</span>
+      <button class="rst-btn" onclick="resetService()">RESET</button>
+    </div>
+  </div>
+
+  <div class="btns">
+    <button class="btn btn-s" id="startBtn" onclick="startTracking()">▶ START</button>
+    <button class="btn btn-x" id="stopBtn"  onclick="stopTracking()" disabled>⏹ STOP</button>
+  </div>
+
+  <div class="status">
+    <div class="dot" id="dot"></div>
+    <span id="statusTxt">START dabao — GPS shuru hoga</span>
+  </div>
+  <div class="acc-note" id="accNote"></div>
+
+  <!-- TABS -->
+  <div class="tabs">
+    <button class="tab active" onclick="showTab('live')">📍 LIVE</button>
+    <button class="tab" onclick="showTab('history')">📅 HISTORY</button>
+    <button class="tab" onclick="showTab('year')">📊 YEARLY</button>
+  </div>
+
+  <div id="historyPanel">
+    <div class="hist-title">TRIPS HISTORY (Last 365 days)</div>
+    <div class="hist-list" id="histList"></div>
+  </div>
+
+  <div id="yearPanel" style="width:100%;max-width:360px;display:none;">
+    <div class="year-summary">
+      <div class="year-title">📊 IS SAAL KA DATA</div>
+      <div class="year-grid">
+        <div class="year-stat"><div class="year-val" id="yrTotalKm">0</div><div class="year-lbl">TOTAL KM</div></div>
+        <div class="year-stat"><div class="year-val" id="yrTrips">0</div><div class="year-lbl">TRIPS</div></div>
+        <div class="year-stat"><div class="year-val" id="yrMaxSpd">0</div><div class="year-lbl">MAX SPEED</div></div>
+        <div class="year-stat"><div class="year-val" id="yrAvgKm">0</div><div class="year-lbl">AVG KM/TRIP</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ════════════════════════════════════════
+//  STATE
+// ════════════════════════════════════════
+const DB_KEY = 'spdPro_v2';
+let db = loadDB();
+let tracking=false, watchId=null, rafId=null, timerInt=null;
+let startTime=null, tripStartKm=0;
+let curSpd=0, animSpd=0, svcShown=false;
+
+function loadDB(){
+  try {
+    const raw = localStorage.getItem(DB_KEY);
+    if(raw) return JSON.parse(raw);
+  } catch(e){}
+  return {
+    totalKm: 0,
+    serviceKm: 0,
+    maxSpeed: 0,
+    trips: [],          // {date, km, maxSpd, duration}
+    lastPos: null
+  };
+}
+
+function saveDB(){ localStorage.setItem(DB_KEY, JSON.stringify(db)); }
+
+// ════════════════════════════════════════
+//  SPLASH → APP
+// ════════════════════════════════════════
+window.addEventListener('load', ()=>{
+  setTimeout(()=>{
+    document.getElementById('splash').style.opacity='0';
+    setTimeout(()=>{
+      document.getElementById('splash').style.display='none';
+      document.getElementById('app').classList.add('show');
+      initApp();
+    }, 500);
+  }, 1500);
+});
+
+function initApp(){
+  document.getElementById('dateLabel').textContent = new Date().toLocaleDateString('hi-IN',{weekday:'long',day:'numeric',month:'long'});
+  document.getElementById('totKm').textContent = db.totalKm.toFixed(2);
+  document.getElementById('maxSpd').textContent = Math.round(db.maxSpeed);
+  updateSvcUI();
+  drawDial(0);
+  rafId = requestAnimationFrame(animLoop);
+}
+
+// ════════════════════════════════════════
+//  GPS POPUP → PERMISSION
+// ════════════════════════════════════════
+function startTracking(){
+  document.getElementById('gpsPopup').classList.add('show');
+}
+
+function requestGPS(){
+  document.getElementById('gpsPopup').classList.remove('show');
+  if(!navigator.geolocation){ setStatus('err','❌ GPS support nahi hai'); return; }
+
+  setStatus('on','📡 GPS signal dhundha ja raha hai...');
+  document.getElementById('startBtn').disabled = true;
+  document.getElementById('stopBtn').disabled  = false;
+
+  tracking  = true;
+  startTime = Date.now();
+  tripStartKm = db.totalKm;
+  svcShown  = false;
+
+  timerInt = setInterval(()=>{
+    const s = Math.floor((Date.now()-startTime)/1000);
+    document.getElementById('tripT').textContent =
+      String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');
+  }, 1000);
+
+  watchId = navigator.geolocation.watchPosition(
+    onGPS, onGPSErr,
+    { enableHighAccuracy:true, maximumAge:500, timeout:15000 }
+  );
+
+  // Wake lock
+  if('wakeLock' in navigator) navigator.wakeLock.request('screen').catch(()=>{});
+}
+
+// ════════════════════════════════════════
+//  GPS CALLBACK
+// ════════════════════════════════════════
+function onGPS(pos){
+  const {latitude:lat, longitude:lon, speed, accuracy} = pos.coords;
+  curSpd = speed!=null && speed>=0 ? speed*3.6 : 0;
+
+  if(db.lastPos){
+    const d = haversine(db.lastPos.lat, db.lastPos.lon, lat, lon);
+    if(d >= 0 && d < 0.3){
+      db.totalKm   += d;
+      db.serviceKm += d;
+    }
+  }
+  db.lastPos = {lat,lon};
+
+  if(curSpd > db.maxSpeed){ db.maxSpeed = curSpd; }
+  saveDB();
+
+  document.getElementById('totKm').textContent  = db.totalKm.toFixed(2);
+  document.getElementById('maxSpd').textContent = Math.round(db.maxSpeed);
+  document.getElementById('accNote').textContent = accuracy ? `GPS: ±${Math.round(accuracy)}m` : '';
+  setStatus('on', `📡 GPS Active — ${Math.round(curSpd)} km/h`);
+  updateSvcUI();
+  if(!svcShown) checkService();
+}
+
+function onGPSErr(e){
+  setStatus('err', e.code===1 ? '❌ GPS permission denied' : e.code===2 ? '❌ GPS nahi mila' : '❌ GPS timeout');
+}
+
+// ════════════════════════════════════════
+//  STOP
+// ════════════════════════════════════════
+function stopTracking(){
+  if(!tracking) return;
+  tracking = false;
+  if(watchId!=null) navigator.geolocation.clearWatch(watchId);
+  clearInterval(timerInt);
+
+  // Save trip
+  const tripKm = db.totalKm - tripStartKm;
+  if(tripKm > 0.05){
+    const dur = Math.floor((Date.now()-startTime)/1000);
+    db.trips.push({
+      date: new Date().toISOString(),
+      km: parseFloat(tripKm.toFixed(2)),
+      maxSpd: Math.round(db.maxSpeed),
+      duration: dur
+    });
+    // Keep only 365 days
+    const cutoff = Date.now() - 365*24*60*60*1000;
+    db.trips = db.trips.filter(t => new Date(t.date).getTime() > cutoff);
+    saveDB();
+  }
+
+  curSpd = 0;
+  document.getElementById('startBtn').disabled = false;
+  document.getElementById('stopBtn').disabled  = true;
+  document.getElementById('tripT').textContent = '00:00';
+  setStatus('off','⏹ Band — data saved ✅');
+}
+
+// ════════════════════════════════════════
+//  SERVICE
+// ════════════════════════════════════════
+function getLimit(){ return parseFloat(document.getElementById('svcLimit').value)||1000; }
+
+function updateSvcUI(){
+  const lim  = getLimit();
+  const left = Math.max(0, lim - db.serviceKm);
+  const pct  = Math.min(100, (db.serviceKm/lim)*100);
+  document.getElementById('svcLeft').textContent = left.toFixed(1);
+  document.getElementById('svcProg').style.width = pct+'%';
+}
+
+function checkService(){
+  if(db.serviceKm >= getLimit()){
+    svcShown = true;
+    document.getElementById('svcKmBig').textContent = getLimit().toFixed(0)+' KM';
+    document.getElementById('servicePopup').classList.add('show');
+    if(navigator.vibrate) navigator.vibrate([500,200,500,200,1000]);
+  }
+}
+
+function closeSvcPopup(){ document.getElementById('servicePopup').classList.remove('show'); }
+
+function resetService(){
+  db.serviceKm = 0; svcShown = false;
+  saveDB(); updateSvcUI();
+}
+
+// ════════════════════════════════════════
+//  TABS
+// ════════════════════════════════════════
+function showTab(t){
+  document.querySelectorAll('.tab').forEach((b,i)=>b.classList.toggle('active',['live','history','year'][i]===t));
+  document.getElementById('historyPanel').classList.toggle('show', t==='history');
+  document.getElementById('yearPanel').style.display = t==='year'?'block':'none';
+  if(t==='history') renderHistory();
+  if(t==='year') renderYear();
+}
+
+function renderHistory(){
+  const list = document.getElementById('histList');
+  if(!db.trips.length){ list.innerHTML='<div class="no-hist">Abhi koi trip nahi 🏍️</div>'; return; }
+  const sorted = [...db.trips].reverse().slice(0,50);
+  list.innerHTML = sorted.map(t=>{
+    const d = new Date(t.date);
+    const dateStr = d.toLocaleDateString('hi-IN',{day:'numeric',month:'short'});
+    const timeStr = d.toLocaleTimeString('hi-IN',{hour:'2-digit',minute:'2-digit'});
+    const dur = Math.floor(t.duration/60)+'m '+( t.duration%60)+'s';
+    return `<div class="hist-item">
+      <div>
+        <div class="hist-date">${dateStr} ${timeStr}</div>
+        <div class="hist-km">${t.km} km • ${dur}</div>
+      </div>
+      <div class="hist-data">${t.maxSpd}<br><span style="font-size:0.6rem;color:var(--dim)">km/h max</span></div>
+    </div>`;
+  }).join('');
+}
+
+function renderYear(){
+  const now = Date.now();
+  const yearTrips = db.trips.filter(t => now - new Date(t.date).getTime() < 365*24*60*60*1000);
+  const total = yearTrips.reduce((s,t)=>s+t.km, 0);
+  const maxS  = yearTrips.reduce((m,t)=>Math.max(m,t.maxSpd),0);
+  document.getElementById('yrTotalKm').textContent = total.toFixed(1);
+  document.getElementById('yrTrips').textContent   = yearTrips.length;
+  document.getElementById('yrMaxSpd').textContent  = maxS;
+  document.getElementById('yrAvgKm').textContent   = yearTrips.length ? (total/yearTrips.length).toFixed(1) : '0';
+}
+
+// ════════════════════════════════════════
+//  CANVAS DIAL
+// ════════════════════════════════════════
+const cv=document.getElementById('dialCanvas'), cx2=cv.getContext('2d');
+const CX=130,CY=138,R=110, MA=Math.PI*.75, XA=Math.PI*2.25, MV=200;
+
+function drawDial(s){
+  cx2.clearRect(0,0,260,260);
+  const t=Math.min(s/MV,1), na=MA+t*(XA-MA);
+
+  // track bg
+  cx2.beginPath(); cx2.arc(CX,CY,R-8,MA,XA);
+  cx2.strokeStyle='#1a1a2e'; cx2.lineWidth=12; cx2.lineCap='round'; cx2.stroke();
+
+  // color arc
+  if(t>0){
+    const g=cx2.createLinearGradient(20,20,240,240);
+    g.addColorStop(0,'#00f5ff'); g.addColorStop(.5,'#ffd600'); g.addColorStop(1,'#ff1744');
+    cx2.beginPath(); cx2.arc(CX,CY,R-8,MA,na);
+    cx2.strokeStyle=g; cx2.lineWidth=12; cx2.lineCap='round'; cx2.stroke();
+  }
+
+  // ticks
+  for(let i=0;i<=20;i++){
+    const a=MA+(i/20)*(XA-MA), maj=i%4===0;
+    const r1=R-20, r2=R-(maj?32:25);
+    cx2.beginPath();
+    cx2.moveTo(CX+r1*Math.cos(a),CY+r1*Math.sin(a));
+    cx2.lineTo(CX+r2*Math.cos(a),CY+r2*Math.sin(a));
+    cx2.strokeStyle=maj?'#44446a':'#22223a'; cx2.lineWidth=maj?2:1; cx2.stroke();
+    if(maj){
+      cx2.font='bold 8px Rajdhani,sans-serif'; cx2.fillStyle='#44446a';
+      cx2.textAlign='center'; cx2.textBaseline='middle';
+      const tr=R-44;
+      cx2.fillText((i/20)*MV, CX+tr*Math.cos(a), CY+tr*Math.sin(a));
+    }
+  }
+
+  // needle
+  cx2.save(); cx2.translate(CX,CY); cx2.rotate(na);
+  cx2.beginPath(); cx2.moveTo(0,5); cx2.lineTo(R-22,0); cx2.lineTo(0,-5); cx2.closePath();
+  cx2.fillStyle='#ff1744'; cx2.shadowColor='#ff1744'; cx2.shadowBlur=12; cx2.fill();
+  cx2.restore();
+
+  // center
+  cx2.beginPath(); cx2.arc(CX,CY,9,0,Math.PI*2);
+  cx2.fillStyle='#080810'; cx2.strokeStyle='#ff1744'; cx2.lineWidth=2; cx2.fill(); cx2.stroke();
+}
+
+function animLoop(){
+  animSpd += (curSpd - animSpd) * 0.13;
+  if(Math.abs(curSpd-animSpd)<0.05) animSpd=curSpd;
+  drawDial(animSpd);
+  const el=document.getElementById('spdNum');
+  el.textContent = Math.round(animSpd);
+  el.style.color = animSpd<80?'var(--cyan)':animSpd<140?'var(--yellow)':'var(--red)';
+  el.style.textShadow = `0 0 20px ${animSpd<80?'var(--cyan)':animSpd<140?'var(--yellow)':'var(--red)'}`;
+  rafId = requestAnimationFrame(animLoop);
+}
+
+// ════════════════════════════════════════
+//  HELPERS
+// ════════════════════════════════════════
+function haversine(a,b,c,d){
+  const R=6371, p=(c-a)*Math.PI/180, q=(d-b)*Math.PI/180;
+  const x=Math.sin(p/2)**2+Math.cos(a*Math.PI/180)*Math.cos(c*Math.PI/180)*Math.sin(q/2)**2;
+  return R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));
+}
+
+function setStatus(type, msg){
+  const dot=document.getElementById('dot'), txt=document.getElementById('statusTxt');
+  dot.className='dot'+(type==='on'?' on':type==='err'?' err':'');
+  txt.textContent=msg;
+}
+</script>
+</body>
+</html>
