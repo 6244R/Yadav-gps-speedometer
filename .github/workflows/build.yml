@@ -1,44 +1,27 @@
 name: Build APK
-
 on:
   push:
     branches: [ main ]
   workflow_dispatch:
-
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
-
-      - name: Accept Android SDK licenses
-        run: yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses || true
-
-      - name: Find and make gradlew executable
+      - name: Install Gradle & Build
         run: |
-          echo "=== Searching for gradlew ==="
-          find . -name "gradlew" -type f
-          find . -name "gradlew" -type f -exec chmod +x {} \;
-
-      - name: Build Debug APK
-        run: |
-          GRADLEW_PATH=$(find . -name "gradlew" -type f | head -1)
-          GRADLEW_DIR=$(dirname $GRADLEW_PATH)
-          echo "Building from directory: $GRADLEW_DIR"
-          cd $GRADLEW_DIR
-          ./gradlew assembleDebug --stacktrace
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
+          wget -q https://services.gradle.org/distributions/gradle-8.4-bin.zip
+          unzip -q gradle-8.4-bin.zip
+          export PATH=$PWD/gradle-8.4/bin:$PATH
+          yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses || true
+          cd SpeedometerApp
+          gradle assembleDebug --stacktrace
+      - uses: actions/upload-artifact@v4
         with:
           name: GPS-Speedometer-APK
-          path: "**/build/outputs/apk/debug/*.apk"
+          path: SpeedometerApp/app/build/outputs/apk/debug/*.apk
           retention-days: 7
