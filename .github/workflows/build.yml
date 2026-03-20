@@ -16,8 +16,45 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v2
+      - name: Create Android Project
+        run: |
+          mkdir -p SpeedometerApp/app/src/main/java/com/speedometer
+          mkdir -p SpeedometerApp/app/src/main/res/layout
+          mkdir -p SpeedometerApp/app/src/main/res/values
+          mkdir -p SpeedometerApp/app/src/main/assets
+
+      - name: Create settings.gradle
+        run: |
+          cat > SpeedometerApp/settings.gradle << 'EOF'
+          pluginManagement {
+            repositories { google(); mavenCentral(); gradlePluginPortal() }
+          }
+          dependencyResolutionManagement {
+            repositories { google(); mavenCentral() }
+          }
+          rootProject.name = "SpeedometerApp"
+          include ':app'
+          EOF
+
+      - name: Create build.gradle
+        run: |
+          cat > SpeedometerApp/app/build.gradle << 'EOF'
+          plugins { id 'com.android.application' }
+          android {
+            compileSdk 34
+            namespace 'com.speedometer'
+            defaultConfig {
+              applicationId "com.speedometer"
+              minSdk 21
+              targetSdk 34
+              versionCode 1
+              versionName "1.0"
+            }
+          }
+          dependencies {
+            implementation 'androidx.appcompat:appcompat:1.6.1'
+          }
+          EOF
 
       - name: Build APK
         run: |
